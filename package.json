@@ -1,6 +1,6 @@
 {
   "name": "whatdone",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "What Did I Do Today? — LLM-powered standup summaries from Git and Claude Code sessions",
   "type": "module",
   "bin": {
