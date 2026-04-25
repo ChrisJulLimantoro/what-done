@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG } from './defaults.js';
 import type { WdidConfig } from '../types.js';
 import { ConfigError } from '../cli/errors.js';
 
-export const CONFIG_DIR = join(homedir(), '.wdid');
+export const CONFIG_DIR = join(homedir(), '.whatdone');
 export const CONFIG_PATH = join(CONFIG_DIR, 'config.toml');
 export const SNAPSHOTS_DIR = join(CONFIG_DIR, 'snapshots');
 export const CACHE_DIR = join(CONFIG_DIR, 'cache');

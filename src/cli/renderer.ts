@@ -52,7 +52,7 @@ export function renderWeekly(output: string): void {
 
 export function renderConfig(config: WdidConfig, configPath: string, detectedProvider: string): void {
   console.log('');
-  console.log(chalk.bold.cyan('━━━ wdid config ━━━'));
+  console.log(chalk.bold.cyan('━━━ whatdone config ━━━'));
   console.log('');
   console.log(chalk.bold('Config file:'), chalk.white(configPath));
   console.log(chalk.bold('LLM provider:'), chalk.green(detectedProvider));

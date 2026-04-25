@@ -30,7 +30,7 @@ export function weeklyCommand(): Command {
       if (snapshots.length === 0) {
         renderWarning(
           `No snapshots found between ${startDate} and ${endDate}.\n` +
-          `Run \`wdid today\` each day to build up your history.`
+          `Run \`whatdone today\` each day to build up your history.`
         );
         return;
       }
@@ -38,7 +38,7 @@ export function weeklyCommand(): Command {
       if (snapshots.length < 3) {
         renderWarning(
           `Only ${snapshots.length} of 7 days have snapshots. ` +
-          `Run \`wdid today\` daily for richer weekly summaries.`
+          `Run \`whatdone today\` daily for richer weekly summaries.`
         );
       }
 

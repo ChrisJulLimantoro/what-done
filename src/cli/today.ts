@@ -33,7 +33,7 @@ export function todayCommand(): Command {
         : config.git.repos.map(expandPath);
 
       if (repoPaths.length === 0) {
-        renderWarning('No git repos found. Set auto_discover = true or add repos in ~/.wdid/config.toml');
+        renderWarning('No git repos found. Set auto_discover = true or add repos in ~/.whatdone/config.toml');
         return;
       }
 

@@ -47,7 +47,7 @@ function isKeyInProfile(profilePath: string, keyName: string): boolean {
 
 /** Append export line to the shell profile */
 function writeKeyToProfile(profilePath: string, keyName: string, keyValue: string): void {
-  const line = `\n# Added by wdid\nexport ${keyName}="${keyValue}"\n`;
+  const line = `\n# Added by whatdone\nexport ${keyName}="${keyValue}"\n`;
   appendFileSync(profilePath, line, 'utf-8');
 }
 
@@ -123,7 +123,7 @@ export function configCommand(): Command {
       const rl = createInterface({ input: process.stdin, output: process.stdout });
 
       try {
-        console.log('\nWelcome to wdid setup!\n');
+        console.log('\nWelcome to whatdone setup!\n');
 
         // ── LLM Provider ──────────────────────────────────────────
         const providerRaw = await prompt(
@@ -194,7 +194,7 @@ export function configCommand(): Command {
 
         console.log(`\n  ✓ Config written to ${CONFIG_PATH}`);
         console.log(`\n  You're all set! Run:\n`);
-        console.log(`    wdid today\n`);
+        console.log(`    whatdone today\n`);
 
       } finally {
         rl.close();

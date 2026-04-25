@@ -20,7 +20,7 @@ export async function summarize(
   );
 
   if (redactedFiles.length > 0) {
-    console.warn(`[wdid] Redacted ${redactedFiles.length} file(s) matching privacy filters: ${redactedFiles.join(', ')}`);
+    console.warn(`[whatdone] Redacted ${redactedFiles.length} file(s) matching privacy filters: ${redactedFiles.join(', ')}`);
   }
 
   // Build the full text blob for chunking

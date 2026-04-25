@@ -108,7 +108,7 @@ export async function collectSessions(
         try {
           obj = JSON.parse(line) as RawEntry;
         } catch {
-          console.warn(`[wdid] Skipping malformed JSONL line in ${filePath}`);
+          console.warn(`[whatdone] Skipping malformed JSONL line in ${filePath}`);
           continue;
         }
 

@@ -4,8 +4,8 @@ import { join } from 'path';
 
 describe('expandPath', () => {
   it('expands ~ to home directory', () => {
-    const result = expandPath('~/.wdid/config.toml');
-    expect(result).toBe(join(homedir(), '.wdid/config.toml'));
+    const result = expandPath('~/.whatdone/config.toml');
+    expect(result).toBe(join(homedir(), '.whatdone/config.toml'));
   });
 
   it('expands lone ~ to home directory', () => {
