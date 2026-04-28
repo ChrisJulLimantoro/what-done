@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import ora from 'ora';
 import { loadConfig, expandPath } from '../config/loader.js';
 import { collectGit } from '../collectors/git.js';
 import { collectSessions } from '../collectors/sessions.js';
@@ -27,7 +28,6 @@ export function todayCommand(): Command {
       const date = opts.date ?? todayDate();
       const useCache = opts.cache !== false;
 
-      // Resolve repo list — auto-discover or use explicit list
       const repoPaths: string[] = config.git.auto_discover
         ? discoverRepos()
         : config.git.repos.map(expandPath);
@@ -37,7 +37,7 @@ export function todayCommand(): Command {
         return;
       }
 
-      // Collect git data — only repos with commits today (auto-discover can return many repos)
+      // Collect git data per repo, preserving attribution
       const repoRawData: RawData[] = [];
       for (const repo of repoPaths) {
         try {
@@ -47,7 +47,6 @@ export function todayCommand(): Command {
             excludePatterns: config.git.exclude_patterns,
             maxDiffTokens: config.git.max_diff_tokens,
           });
-          // Skip repos with no activity today
           if (gitData.commitCount === 0) continue;
           repoRawData.push({
             commits: gitData.commits,
@@ -58,91 +57,121 @@ export function todayCommand(): Command {
             date,
           });
         } catch {
-          // Silently skip unreadable repos during auto-discovery
-          // Only warn for explicitly configured repos
           if (!config.git.auto_discover) {
             renderWarning(`Skipping repo ${repo}: not a valid git repository`);
           }
         }
       }
 
-      // Collect Claude Code sessions
+      // Attach sessions to the first repo entry (or a synthetic one)
       const sessionData = await collectSessions(
         config.claude_code.session_path,
         date,
         config.claude_code.enabled
       );
 
-      // Merge all repo data
-      const merged: RawData = {
-        commits: repoRawData.flatMap((r) => r.commits),
-        diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
-        diff: repoRawData.map((r) => r.diff).filter(Boolean).join('\n\n'),
-        sessions: sessionData.summaries,
-        repoPath: config.git.repos[0] ?? '.',
-        date,
-      };
+      if (sessionData.summaries.length > 0) {
+        if (repoRawData.length > 0) {
+          repoRawData[0].sessions = sessionData.summaries;
+        } else {
+          repoRawData.push({
+            commits: [],
+            diffstat: '',
+            diff: '',
+            sessions: sessionData.summaries,
+            repoPath: '.',
+            date,
+          });
+        }
+      }
 
-      if (merged.commits.length === 0 && merged.sessions.length === 0) {
+      if (repoRawData.length === 0) {
         renderWarning(`No git commits or Claude Code sessions found for ${date}.`);
         return;
       }
 
       // Dry run — print prompt and exit
       if (opts.dryRun) {
-        const prompt = buildTodayPrompt(merged);
+        const allCommits = repoRawData.flatMap((r) => r.commits);
+        const allDiff = repoRawData.map((r) => r.diff).filter(Boolean).join('\n\n');
+        const allSessions = repoRawData.flatMap((r) => r.sessions);
+        const dummyRaw: RawData = {
+          commits: allCommits,
+          diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
+          diff: allDiff,
+          sessions: allSessions,
+          repoPath: repoRawData[0]?.repoPath ?? '.',
+          date,
+        };
+        const prompt = buildTodayPrompt(dummyRaw, config.template.sections);
         renderDryRun(prompt);
         return;
       }
 
-      // Check cache
-      const cacheKey = hashContent(merged.diff + merged.sessions.join(''));
+      // Cache key includes template schema hash to bust when template changes
+      const cacheContent =
+        repoRawData.flatMap((r) => r.commits).join('') +
+        repoRawData.flatMap((r) => r.sessions).join('') +
+        JSON.stringify(config.template.sections);
+      const cacheKey = hashContent(cacheContent);
+
       if (useCache) {
         const cached = readCache(cacheKey);
         if (cached) {
           renderInfo('(Using cached summary — run with --no-cache to regenerate)');
-          // Load existing snapshot to display
           const snap: DailySnapshot = {
-            version: 1,
+            version: 2,
             date,
             generatedAt: new Date().toISOString(),
             provider: 'cached',
             model: 'cached',
             summary: cached,
             raw: {
-              commits: merged.commits,
-              diffstat: merged.diffstat,
-              sessions: merged.sessions,
+              commits: repoRawData.flatMap((r) => r.commits),
+              diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
+              sessions: sessionData.summaries,
             },
           };
-          renderToday(snap, 'cached', 'cache hit');
+          renderToday(snap, 'cached', 'cache hit', config.template);
           return;
         }
       }
 
-      // Summarize
       const router = createRouter(config, opts.provider);
-      const result = await summarize(merged, config, router);
+      const repoCount = repoRawData.length;
+      const commitCount = repoRawData.reduce((n, r) => n + r.commits.length, 0);
+      const spinner = ora(
+        `Summarizing ${commitCount} commit${commitCount !== 1 ? 's' : ''} across ${repoCount} repo${repoCount !== 1 ? 's' : ''}…`
+      ).start();
 
-      // Save snapshot
+      let result: Awaited<ReturnType<typeof summarize>>;
+      try {
+        result = await summarize(repoRawData, config, router);
+        spinner.succeed('Summary generated');
+      } catch (err) {
+        spinner.fail('LLM call failed');
+        throw err;
+      }
+
       const snapshot: DailySnapshot = {
-        version: 1,
+        version: 2,
         date,
         generatedAt: new Date().toISOString(),
         provider: router.provider,
         model: router.model,
-        summary: result,
+        summary: result.summary,
+        groups: result.groups,
         raw: {
-          commits: merged.commits,
-          diffstat: merged.diffstat,
-          sessions: merged.sessions,
+          commits: repoRawData.flatMap((r) => r.commits),
+          diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
+          sessions: sessionData.summaries,
         },
       };
 
       const savedPath = saveSnapshot(snapshot);
-      writeCache(cacheKey, result);
+      writeCache(cacheKey, result.summary);
       renderInfo(`Snapshot saved to ${savedPath}`);
 
-      renderToday(snapshot, router.provider, router.model);
+      renderToday(snapshot, router.provider, router.model, config.template);
     });
 }

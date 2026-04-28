@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import ora from 'ora';
 import { loadConfig } from '../config/loader.js';
 import { buildWeeklyPrompt } from '../llm/prompts.js';
 import { createRouter } from '../llm/router.js';
@@ -44,7 +45,15 @@ export function weeklyCommand(): Command {
 
       const router = createRouter(config, opts.provider);
       const prompt = buildWeeklyPrompt(snapshots);
-      const output = await router.complete(prompt, 800);
+      const spinner = ora('Generating weekly summary…').start();
+      let output: string;
+      try {
+        output = await router.complete(prompt, 1000);
+        spinner.succeed('Done');
+      } catch (err) {
+        spinner.fail('LLM call failed');
+        throw err;
+      }
       renderWeekly(output);
     });
 }

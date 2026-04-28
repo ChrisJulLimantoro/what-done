@@ -1,24 +1,30 @@
-import type { RawData, SummaryResult, DailySnapshot, Chunk } from '../types.js';
+import type { RawData, SummaryResult, DailySnapshot, Chunk, TemplateSection } from '../types.js';
 
-const SUMMARY_SCHEMA = `{
-  "oneLiner": "one sentence summary of the day",
-  "narratives": ["2-4 bullet points describing major work streams"],
-  "bullets": ["6-10 granular bullet points of specific changes"],
-  "themes": ["2-4 theme keywords like 'refactoring', 'bug fixes', 'new feature'"]
-}`;
-
-function jsonOnlyInstruction(): string {
-  return 'Respond with ONLY valid JSON. No markdown, no code fences, no explanation.';
+function buildSchemaString(sections: TemplateSection[]): string {
+  const fields = sections.map((s) => {
+    if (s.type === 'list') {
+      return `  "${s.name}": ["..."]  // ${s.description}`;
+    }
+    return `  "${s.name}": "..."  // ${s.description}`;
+  });
+  return `{\n${fields.join(',\n')}\n}`;
 }
 
-export function buildTodayPrompt(rawData: RawData): string {
+export function buildTodayPrompt(rawData: RawData, sections?: TemplateSection[]): string {
   const parts: string[] = [];
 
   parts.push(`You are a helpful assistant that summarizes a software developer's daily work.`);
   parts.push(`Analyze the following git activity and Claude Code session data for ${rawData.date}.`);
   parts.push(``);
-  parts.push(`${jsonOnlyInstruction()} Return a JSON object matching this schema:`);
-  parts.push(SUMMARY_SCHEMA);
+
+  if (sections && sections.length > 0) {
+    parts.push(`Respond with ONLY valid JSON. No markdown, no code fences, no explanation.`);
+    parts.push(`Return a JSON object matching this schema:`);
+    parts.push(buildSchemaString(sections));
+  } else {
+    parts.push(`Respond with ONLY valid JSON. No markdown, no code fences, no explanation.`);
+    parts.push(`Return a JSON object with: oneLiner (string), narratives (array), bullets (array), themes (array).`);
+  }
   parts.push('');
 
   if (rawData.commits.length > 0) {
@@ -35,7 +41,7 @@ export function buildTodayPrompt(rawData: RawData): string {
 
   if (rawData.diff) {
     parts.push(`## Code Diff`);
-    parts.push(rawData.diff.slice(0, 12000)); // safety cap
+    parts.push(rawData.diff.slice(0, 12000));
     parts.push('');
   }
 
@@ -57,13 +63,20 @@ export function buildChunkSummaryPrompt(chunk: Chunk, date: string): string {
   ].join('\n');
 }
 
-export function buildSynthesisPrompt(chunkSummaries: string[], date: string): string {
+export function buildSynthesisPrompt(chunkSummaries: string[], date: string, sections?: TemplateSection[]): string {
   const parts: string[] = [];
   parts.push(`You are a helpful assistant that summarizes a software developer's daily work.`);
   parts.push(`Synthesize the following partial summaries of code changes made on ${date}.`);
   parts.push(``);
-  parts.push(`${jsonOnlyInstruction()} Return a JSON object matching this schema:`);
-  parts.push(SUMMARY_SCHEMA);
+
+  if (sections && sections.length > 0) {
+    parts.push(`Respond with ONLY valid JSON. No markdown, no code fences, no explanation.`);
+    parts.push(`Return a JSON object matching this schema:`);
+    parts.push(buildSchemaString(sections));
+  } else {
+    parts.push(`Respond with ONLY valid JSON. No markdown, no code fences, no explanation.`);
+    parts.push(`Return a JSON object with: oneLiner (string), narratives (array), bullets (array), themes (array).`);
+  }
   parts.push('');
   parts.push('## Partial Summaries');
   chunkSummaries.forEach((s, i) => {
@@ -75,6 +88,10 @@ export function buildSynthesisPrompt(chunkSummaries: string[], date: string): st
 }
 
 export function buildStandupPrompt(snapshot: DailySnapshot): string {
+  const oneLiner = String(snapshot.summary['oneLiner'] ?? '');
+  const bullets = (snapshot.summary['bullets'] ?? []) as string[];
+  const themes = (snapshot.summary['themes'] ?? []) as string[];
+
   return [
     `Convert the following work summary into a concise standup update.`,
     `Format it as:`,
@@ -85,13 +102,13 @@ export function buildStandupPrompt(snapshot: DailySnapshot): string {
     `Keep it brief — 2-3 sentences per section. Plain text output.`,
     ``,
     `## Summary`,
-    snapshot.summary.oneLiner,
+    oneLiner,
     ``,
     `## Details`,
-    snapshot.summary.bullets.map((b) => `- ${b}`).join('\n'),
+    bullets.map((b) => `- ${b}`).join('\n'),
     ``,
     `## Themes`,
-    snapshot.summary.themes.join(', '),
+    themes.join(', '),
   ].join('\n');
 }
 
@@ -104,9 +121,11 @@ export function buildWeeklyPrompt(snapshots: DailySnapshot[]): string {
 
   for (const snap of snapshots) {
     parts.push(`### ${snap.date}`);
-    parts.push(snap.summary.oneLiner);
-    if (snap.summary.bullets.length > 0) {
-      parts.push(snap.summary.bullets.map((b) => `- ${b}`).join('\n'));
+    const oneLiner = String(snap.summary['oneLiner'] ?? '');
+    const bullets = (snap.summary['bullets'] ?? []) as string[];
+    parts.push(oneLiner);
+    if (bullets.length > 0) {
+      parts.push(bullets.map((b) => `- ${b}`).join('\n'));
     }
     parts.push('');
   }
@@ -114,32 +133,27 @@ export function buildWeeklyPrompt(snapshots: DailySnapshot[]): string {
   return parts.join('\n');
 }
 
-/**
- * Parse an LLM response into a SummaryResult.
- * Handles raw JSON and markdown-wrapped JSON. Falls back gracefully.
- */
 export function parseSummaryResult(response: string): SummaryResult {
-  const fallback: SummaryResult = {
-    oneLiner: response.trim().split('\n')[0]?.slice(0, 200) ?? 'Summary unavailable.',
-    narratives: [],
-    bullets: [],
-    themes: [],
-  };
-
   let text = response.trim();
-
-  // Strip markdown code fences
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
   try {
-    const parsed = JSON.parse(text) as Partial<SummaryResult>;
-    return {
-      oneLiner: typeof parsed.oneLiner === 'string' ? parsed.oneLiner : fallback.oneLiner,
-      narratives: Array.isArray(parsed.narratives) ? parsed.narratives.map(String) : [],
-      bullets: Array.isArray(parsed.bullets) ? parsed.bullets.map(String) : [],
-      themes: Array.isArray(parsed.themes) ? parsed.themes.map(String) : [],
-    };
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const result: SummaryResult = {};
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof val === 'string') {
+        result[key] = val;
+      } else if (Array.isArray(val)) {
+        result[key] = val.map(String);
+      }
+    }
+    return result;
   } catch {
-    return fallback;
+    return {
+      oneLiner: text.split('\n')[0]?.slice(0, 200) ?? 'Summary unavailable.',
+      narratives: [],
+      bullets: [],
+      themes: [],
+    };
   }
 }

@@ -1,15 +1,29 @@
+export type SectionType = 'string' | 'list';
+
+export interface TemplateSection {
+  name: string;
+  type: SectionType;
+  description: string;
+  required?: boolean;
+}
+
+export type GroupingMode = 'flat' | 'by_project';
+
+export interface TemplateConfig {
+  grouping: GroupingMode;
+  sections: TemplateSection[];
+}
+
+export type SummaryResult = Record<string, string | string[]>;
+
 export interface DailySnapshot {
-  version: 1;
+  version: 2;
   date: string;        // YYYY-MM-DD
   generatedAt: string; // ISO timestamp
   provider: string;
   model: string;
-  summary: {
-    oneLiner: string;
-    narratives: string[];
-    bullets: string[];
-    themes: string[];
-  };
+  summary: SummaryResult;
+  groups?: Record<string, SummaryResult>; // by_project grouping
   raw: {
     commits: string[];
     diffstat: string;
@@ -37,14 +51,20 @@ export interface WdidConfig {
   output: {
     format: 'text' | 'markdown' | 'json';
   };
+  template: TemplateConfig;
 }
 
 export type LLMProvider = 'anthropic' | 'gemini' | 'openai';
 
 export interface LLMRouter {
   complete(prompt: string, maxTokens: number): Promise<string>;
+  completeStructured(prompt: string, schema: StructuredSchema, maxTokens: number): Promise<SummaryResult>;
   provider: LLMProvider;
   model: string;
+}
+
+export interface StructuredSchema {
+  properties: Record<string, { type: 'string' | 'array'; description: string; required?: boolean }>;
 }
 
 export interface RawData {
@@ -54,13 +74,6 @@ export interface RawData {
   sessions: string[];
   repoPath: string;
   date: string;
-}
-
-export interface SummaryResult {
-  oneLiner: string;
-  narratives: string[];
-  bullets: string[];
-  themes: string[];
 }
 
 export interface Chunk {

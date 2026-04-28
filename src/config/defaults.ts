@@ -5,7 +5,7 @@ export const DEFAULT_CONFIG: WdidConfig = {
     provider: undefined,
     max_tokens_per_chunk: 3000,
     max_chunks: 10,
-    max_summary_tokens: 500,
+    max_summary_tokens: 2000,
   },
   git: {
     auto_discover: true,
@@ -32,5 +32,31 @@ export const DEFAULT_CONFIG: WdidConfig = {
   },
   output: {
     format: 'text',
+  },
+  template: {
+    grouping: 'flat',
+    sections: [
+      {
+        name: 'oneLiner',
+        type: 'string',
+        description: 'One sentence summary of the day',
+        required: true,
+      },
+      {
+        name: 'narratives',
+        type: 'list',
+        description: '2-4 bullet points describing major work streams',
+      },
+      {
+        name: 'bullets',
+        type: 'list',
+        description: '6-10 granular bullet points of specific changes',
+      },
+      {
+        name: 'themes',
+        type: 'list',
+        description: '2-4 theme keywords like "refactoring", "bug fixes", "new feature"',
+      },
+    ],
   },
 };

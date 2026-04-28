@@ -1,6 +1,6 @@
 {
   "name": "whatdone",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "What Did I Do Today? — LLM-powered standup summaries from Git and Claude Code sessions",
   "type": "module",
   "bin": {
@@ -33,17 +33,30 @@
     "cli",
     "developer-tools"
   ],
+  "author": "Christopher Julius <christopherlimantoro@gmail.com>",
+  "homepage": "https://github.com/ChrisJulLimantoro/what-done#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChrisJulLimantoro/what-done.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ChrisJulLimantoro/what-done/issues"
+  },
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.0",
     "@google/generative-ai": "^0.21.0",
     "@iarna/toml": "^2.2.5",
+    "boxen": "^8.0.1",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "gradient-string": "^3.0.0",
     "minimatch": "^10.0.1",
-    "openai": "^4.58.0"
+    "openai": "^4.58.0",
+    "ora": "^9.4.0"
   },
   "devDependencies": {
+    "@types/gradient-string": "^1.1.6",
     "@types/jest": "^30.0.0",
     "@types/minimatch": "^5.1.2",
     "@types/node": "^22.0.0",
@@ -54,13 +67,22 @@
   },
   "jest": {
     "preset": "ts-jest/presets/default-esm",
-    "extensionsToTreatAsEsm": [".ts"],
-    "testMatch": ["<rootDir>/src/**/*.test.ts"],
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
+    "testMatch": [
+      "<rootDir>/src/**/*.test.ts"
+    ],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "useESM": true }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true
+        }
+      ]
     }
   }
 }

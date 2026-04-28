@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import ora from 'ora';
 import { loadConfig, expandPath } from '../config/loader.js';
 import { collectGit } from '../collectors/git.js';
 import { discoverRepos } from '../collectors/discover.js';
@@ -23,11 +24,9 @@ export function standupCommand(): Command {
       const config = loadConfig();
       const date = opts.date ?? todayDate();
 
-      // Try to load an existing snapshot first
       let snapshot = loadSnapshot(date);
 
       if (!snapshot) {
-        // No snapshot — collect and summarize now
         renderWarning(`No snapshot for ${date} — generating one now...`);
 
         const repoPaths: string[] = config.git.auto_discover
@@ -65,44 +64,64 @@ export function standupCommand(): Command {
           config.claude_code.enabled
         );
 
-        const merged: RawData = {
-          commits: repoRawData.flatMap((r) => r.commits),
-          diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
-          diff: repoRawData.map((r) => r.diff).filter(Boolean).join('\n\n'),
-          sessions: sessionData.summaries,
-          repoPath: config.git.repos[0] ?? '.',
-          date,
-        };
+        if (sessionData.summaries.length > 0 && repoRawData.length > 0) {
+          repoRawData[0].sessions = sessionData.summaries;
+        } else if (sessionData.summaries.length > 0) {
+          repoRawData.push({
+            commits: [],
+            diffstat: '',
+            diff: '',
+            sessions: sessionData.summaries,
+            repoPath: '.',
+            date,
+          });
+        }
 
-        if (merged.commits.length === 0 && merged.sessions.length === 0) {
+        if (repoRawData.length === 0) {
           renderWarning(`No git commits or sessions found for ${date}.`);
           return;
         }
 
         const router = createRouter(config, opts.provider);
-        const result = await summarize(merged, config, router);
+        const spinner = ora('Generating summary…').start();
+        let result: Awaited<ReturnType<typeof summarize>>;
+        try {
+          result = await summarize(repoRawData, config, router);
+          spinner.succeed('Summary generated');
+        } catch (err) {
+          spinner.fail('LLM call failed');
+          throw err;
+        }
 
         snapshot = {
-          version: 1,
+          version: 2,
           date,
           generatedAt: new Date().toISOString(),
           provider: router.provider,
           model: router.model,
-          summary: result,
+          summary: result.summary,
+          groups: result.groups,
           raw: {
-            commits: merged.commits,
-            diffstat: merged.diffstat,
-            sessions: merged.sessions,
+            commits: repoRawData.flatMap((r) => r.commits),
+            diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
+            sessions: sessionData.summaries,
           },
         };
 
         saveSnapshot(snapshot);
       }
 
-      // Format as standup
       const router = createRouter(config, opts.provider);
-      const prompt = buildStandupPrompt(snapshot as DailySnapshot);
-      const output = await router.complete(prompt, 300);
+      const spinner = ora('Formatting standup…').start();
+      let output: string;
+      try {
+        const prompt = buildStandupPrompt(snapshot as DailySnapshot);
+        output = await router.complete(prompt, 400);
+        spinner.succeed('Done');
+      } catch (err) {
+        spinner.fail('LLM call failed');
+        throw err;
+      }
       renderStandup(output);
     });
 }

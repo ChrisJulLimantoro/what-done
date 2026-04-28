@@ -188,6 +188,15 @@ export function configCommand(): Command {
           output: {
             format: 'text',
           },
+          template: {
+            grouping: 'flat',
+            sections: [
+              { name: 'oneLiner', type: 'string', description: 'One sentence summary of the day', required: true },
+              { name: 'narratives', type: 'list', description: '2-4 bullet points describing major work streams' },
+              { name: 'bullets', type: 'list', description: '6-10 granular bullet points of specific changes' },
+              { name: 'themes', type: 'list', description: '2-4 theme keywords' },
+            ],
+          },
         };
 
         writeConfig(config);
