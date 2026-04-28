@@ -10,9 +10,10 @@ import { createRouter } from '../llm/router.js';
 import { loadSnapshot, saveSnapshot } from '../store/snapshots.js';
 import { renderStandup, renderWarning } from './renderer.js';
 import type { DailySnapshot, RawData } from '../types.js';
+import { localDateString } from '../utils/date.js';
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString(new Date());
 }
 
 export function standupCommand(): Command {

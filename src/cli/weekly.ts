@@ -1,19 +1,22 @@
+import { createInterface } from 'node:readline';
 import { Command } from 'commander';
 import ora from 'ora';
 import { loadConfig } from '../config/loader.js';
 import { buildWeeklyPrompt } from '../llm/prompts.js';
 import { createRouter } from '../llm/router.js';
-import { loadSnapshotsRange } from '../store/snapshots.js';
-import { renderWeekly, renderWarning } from './renderer.js';
+import { loadSnapshotsRange, getMissingDates } from '../store/snapshots.js';
+import { renderWeekly, renderWarning, renderMissingDates, renderInfo } from './renderer.js';
+import { generateSnapshot } from './today.js';
+import { localDateString } from '../utils/date.js';
 
 function daysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDateString(d);
 }
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString(new Date());
 }
 
 export function weeklyCommand(): Command {
@@ -26,21 +29,45 @@ export function weeklyCommand(): Command {
       const startDate = opts.since ?? daysAgo(6);
       const endDate = todayDate();
 
-      const snapshots = loadSnapshotsRange(startDate, endDate);
+      let snapshots = loadSnapshotsRange(startDate, endDate);
+      const missing = getMissingDates(startDate, endDate);
+
+      if (snapshots.length === 0 && missing.length === 0) {
+        renderWarning(`No activity found between ${startDate} and ${endDate}.`);
+        return;
+      }
+
+      if (missing.length > 0) {
+        renderMissingDates(missing);
+
+        const answer = await new Promise<string>((resolve) => {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          rl.question('Generate missing snapshots now? (y/n) ', (ans) => {
+            rl.close();
+            resolve(ans);
+          });
+        });
+
+        if (answer.trim().toLowerCase().startsWith('y')) {
+          for (const date of missing) {
+            renderInfo(`Generating snapshot for ${date}…`);
+            const result = await generateSnapshot(date, config, opts.provider);
+            if (result) {
+              renderInfo(`  ✓ ${date}`);
+            } else {
+              renderWarning(`  No data found for ${date}, skipping.`);
+            }
+          }
+          snapshots = loadSnapshotsRange(startDate, endDate);
+        }
+      }
 
       if (snapshots.length === 0) {
         renderWarning(
           `No snapshots found between ${startDate} and ${endDate}.\n` +
-          `Run \`whatdone today\` each day to build up your history.`
+          `Run \`whatdone today\` each day to build up your history.`,
         );
         return;
-      }
-
-      if (snapshots.length < 3) {
-        renderWarning(
-          `Only ${snapshots.length} of 7 days have snapshots. ` +
-          `Run \`whatdone today\` daily for richer weekly summaries.`
-        );
       }
 
       const router = createRouter(config, opts.provider);

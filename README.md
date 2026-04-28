@@ -102,11 +102,12 @@ whatdone standup --date 2026-04-24
 ```
 
 ### `whatdone weekly`
-Summarize the past 7 days. Reads from saved daily snapshots — run `whatdone today` each day for best results.
+Summarize the past 7 days. Reads from saved daily snapshots. If any days in the range are missing a snapshot, you'll be prompted to generate them on the spot before the summary runs.
 
 ```bash
 whatdone weekly
 whatdone weekly --since 2026-04-18   # custom start date
+whatdone weekly --provider openai    # override LLM provider
 ```
 
 ### `whatdone config`

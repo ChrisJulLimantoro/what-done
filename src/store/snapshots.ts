@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 
 import { join } from 'path';
 import { SNAPSHOTS_DIR } from '../config/loader.js';
 import type { DailySnapshot } from '../types.js';
+import { localDateString } from '../utils/date.js';
 
 function snapshotDir(date: string): string {
   return join(SNAPSHOTS_DIR, date);
@@ -59,10 +60,21 @@ export function loadSnapshotsRange(startDate: string, endDate: string): DailySna
   const end = new Date(endDate);
 
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = localDateString(d);
     const snap = loadSnapshot(dateStr);
     if (snap) snapshots.push(snap);
   }
 
   return snapshots.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function getMissingDates(startDate: string, endDate: string): string[] {
+  const missing: string[] = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = localDateString(d);
+    if (!loadSnapshot(dateStr)) missing.push(dateStr);
+  }
+  return missing;
 }

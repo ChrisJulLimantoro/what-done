@@ -10,10 +10,90 @@ import { createRouter } from '../llm/router.js';
 import { saveSnapshot } from '../store/snapshots.js';
 import { hashContent, readCache, writeCache } from '../store/cache.js';
 import { renderToday, renderDryRun, renderWarning, renderInfo } from './renderer.js';
-import type { DailySnapshot, RawData } from '../types.js';
+import type { DailySnapshot, RawData, WdidConfig } from '../types.js';
+import { localDateString } from '../utils/date.js';
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString(new Date());
+}
+
+export async function generateSnapshot(
+  date: string,
+  config: WdidConfig,
+  providerOverride?: string,
+): Promise<DailySnapshot | null> {
+  const repoPaths: string[] = config.git.auto_discover
+    ? discoverRepos()
+    : config.git.repos.map(expandPath);
+
+  if (repoPaths.length === 0) return null;
+
+  const repoRawData: RawData[] = [];
+  for (const repo of repoPaths) {
+    try {
+      const gitData = await collectGit({
+        repoPath: repo,
+        date,
+        excludePatterns: config.git.exclude_patterns,
+        maxDiffTokens: config.git.max_diff_tokens,
+      });
+      if (gitData.commitCount === 0) continue;
+      repoRawData.push({
+        commits: gitData.commits,
+        diffstat: gitData.diffstat,
+        diff: gitData.diff,
+        sessions: [],
+        repoPath: repo,
+        date,
+      });
+    } catch {
+      // silently skip invalid repos in programmatic use
+    }
+  }
+
+  const sessionData = await collectSessions(
+    config.claude_code.session_path,
+    date,
+    config.claude_code.enabled,
+  );
+
+  if (sessionData.summaries.length > 0) {
+    if (repoRawData.length > 0) {
+      repoRawData[0].sessions = sessionData.summaries;
+    } else {
+      repoRawData.push({
+        commits: [],
+        diffstat: '',
+        diff: '',
+        sessions: sessionData.summaries,
+        repoPath: '.',
+        date,
+      });
+    }
+  }
+
+  if (repoRawData.length === 0) return null;
+
+  const router = createRouter(config, providerOverride);
+  const result = await summarize(repoRawData, config, router);
+
+  const snapshot: DailySnapshot = {
+    version: 2,
+    date,
+    generatedAt: new Date().toISOString(),
+    provider: router.provider,
+    model: router.model,
+    summary: result.summary,
+    groups: result.groups,
+    raw: {
+      commits: repoRawData.flatMap((r) => r.commits),
+      diffstat: repoRawData.map((r) => r.diffstat).filter(Boolean).join('\n\n'),
+      sessions: sessionData.summaries,
+    },
+  };
+
+  saveSnapshot(snapshot);
+  return snapshot;
 }
 
 export function todayCommand(): Command {

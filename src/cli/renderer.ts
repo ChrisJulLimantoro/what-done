@@ -194,3 +194,8 @@ export function renderWarning(message: string): void {
 export function renderInfo(message: string): void {
   console.log(chalk.dim('  ' + message));
 }
+
+export function renderMissingDates(dates: string[]): void {
+  const list = dates.map((d) => `  • ${d}`).join('\n');
+  console.warn(chalk.yellow(`⚠  Missing snapshots for:\n${list}`));
+}
